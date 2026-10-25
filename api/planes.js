@@ -28,7 +28,7 @@ export default {
       });
     }
 
-    // 3. قائمة المصادر (نفس المصادر التي كنا نستخدمها)
+    // 3. قائمة المصادر
     const sources = [
       `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}`,
       `https://opendata.adsb.fi/api/v2/point/${lat}/${lon}/${radius}`,
