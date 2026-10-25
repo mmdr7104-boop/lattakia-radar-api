@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/planes.js": {
+      "maxDuration": 10
+    }
+  }
+}
