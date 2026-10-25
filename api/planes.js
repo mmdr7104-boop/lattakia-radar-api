@@ -1,48 +1,50 @@
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default {
+  async fetch(req) {
+    const url = new URL(req.url);
+    const lat = url.searchParams.get('lat');
+    const lon = url.searchParams.get('lon');
+    const radius = url.searchParams.get('radius') || '250';
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  const { lat, lon, radius } = req.query;
-  if (!lat || !lon) {
-    return res.status(400).json({ error: 'Missing lat/lon parameters' });
-  }
-
-  const dist = Math.min(parseInt(radius) || 250, 250);
-  const sources = [
-    { name: 'adsb.lol', url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${dist}` },
-    { name: 'adsb.fi', url: `https://opendata.adsb.fi/api/v2/point/${lat}/${lon}/${dist}` },
-    { name: 'airplanes.live', url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${dist}` }
-  ];
-
-  for (const src of sources) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(src.url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'LattakiaRadar/14.0',
-          'Accept': 'application/json',
-        },
+    if (!lat || !lon) {
+      return new Response(JSON.stringify({ error: 'Missing lat/lon' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
-      clearTimeout(timeout);
-
-      if (!response.ok) continue;
-      const data = await response.json();
-      res.setHeader('Cache-Control', 's-maxage=10, stale-while-revalidate=5');
-      return res.status(200).json({
-        source: src.name,
-        timestamp: Date.now(),
-        ac: data.ac || data.aircraft || [],
-      });
-    } catch (err) {
-      continue;
     }
+
+    const sources = [
+      `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}`,
+      `https://opendata.adsb.fi/api/v2/point/${lat}/${lon}/${radius}`,
+      `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}`
+    ];
+
+    for (const src of sources) {
+      try {
+        const res = await fetch(src, {
+          headers: { 'User-Agent': 'LattakiaRadar/14.0' }
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        return new Response(JSON.stringify({
+          source: src.split('/')[2],
+          timestamp: Date.now(),
+          ac: data.ac || data.aircraft || []
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 's-maxage=10'
+          }
+        });
+      } catch (e) {
+        continue;
+      }
+    }
+
+    return new Response(JSON.stringify({ error: 'All sources failed' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
   }
-  return res.status(502).json({ error: 'All upstream sources failed' });
-}
+};
